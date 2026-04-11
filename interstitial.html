@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loading...</title>
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #0a0a0a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', sans-serif;
+    color: #fff;
+  }
+  .container {
+    max-width: 600px;
+    width: 90%;
+    text-align: center;
+  }
+  .timer {
+    font-size: 72px;
+    font-weight: 700;
+    color: #ff1f1f;
+    margin-bottom: 10px;
+  }
+  .ad-container {
+    background: #151515;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+    min-height: 250px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ad-image {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+  }
+  .ad-video {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+  }
+  .ad-text {
+    font-size: 20px;
+    color: #ccc;
+  }
+  .skip-btn {
+    background: #333;
+    color: #aaa;
+    border: 1px solid #444;
+    padding: 12px 24px;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: all 0.2s;
+  }
+  .skip-btn:hover {
+    border-color: #ff1f1f;
+    color: #ff1f1f;
+  }
+  .footer {
+    margin-top: 20px;
+    font-size: 12px;
+    color: #555;
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+  <div class="timer" id="timer">10</div>
+  <div class="ad-container" id="ad-container">
+    <div class="ad-text" id="ad-text">Loading ad...</div>
+    <img id="ad-image" style="display:none;" class="ad-image">
+    <video id="ad-video" style="display:none;" class="ad-video" controls autoplay muted playsinline></video>
+  </div>
+  <button class="skip-btn" id="skip-btn" onclick="skipAd()" disabled>Please wait 5s</button>
+  <div class="footer">SnapLink — Smart Redirect</div>
+</div>
+
+<script>
+  const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
+  const urlParams = new URLSearchParams(window.location.search);
+  const shortId = urlParams.get('id');
+  let countdown = 10;
+  let canSkip = false;
+  let targetUrl = '';
+  let adData = null;
+
+  async function fetchTargetAndAd() {
+    try {
+      const formData = new URLSearchParams();
+      formData.append('action', 'getTarget');
+      formData.append('id', shortId);
+      const res = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.error) {
+        document.body.innerHTML = '<h2 style="color:red">Invalid link</h2>';
+        return;
+      }
+      targetUrl = data.url;
+      adData = data.ad;
+      displayAd(adData);
+      // Send click analytics
+      await sendAnalytics(shortId);
+    } catch(e) {
+      document.body.innerHTML = '<h2>Error loading</h2>';
+    }
+  }
+
+  function displayAd(ad) {
+    const textEl = document.getElementById('ad-text');
+    const imgEl = document.getElementById('ad-image');
+    const vidEl = document.getElementById('ad-video');
+    textEl.style.display = 'none';
+    imgEl.style.display = 'none';
+    vidEl.style.display = 'none';
+    
+    if (!ad) {
+      textEl.textContent = 'Advertisement';
+      textEl.style.display = 'block';
+    } else if (ad.type === 'image') {
+      imgEl.src = ad.content;
+      imgEl.style.display = 'block';
+    } else if (ad.type === 'video') {
+      vidEl.src = ad.content;
+      vidEl.style.display = 'block';
+      vidEl.play().catch(()=>{});
+    } else {
+      textEl.textContent = ad.content;
+      textEl.style.display = 'block';
+    }
+  }
+
+  async function sendAnalytics(id) {
+    try {
+      const ipRes = await fetch('https://ipapi.co/json/');
+      const ipData = await ipRes.json();
+      const formData = new URLSearchParams();
+      formData.append('action', 'click');
+      formData.append('id', id);
+      formData.append('ip', ipData.ip || '');
+      formData.append('country', ipData.country_name || '');
+      formData.append('city', ipData.city || '');
+      formData.append('userAgent', navigator.userAgent);
+      formData.append('platform', navigator.platform || '');
+      formData.append('referrer', document.referrer || 'Direct');
+      await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+    } catch(e) {}
+  }
+
+  function updateTimer() {
+    document.getElementById('timer').textContent = countdown;
+    if (countdown <= 5) {
+      document.getElementById('skip-btn').disabled = false;
+      document.getElementById('skip-btn').textContent = 'Skip Ad';
+      canSkip = true;
+    }
+    if (countdown <= 0) {
+      redirectToTarget();
+    } else {
+      countdown--;
+      setTimeout(updateTimer, 1000);
+    }
+  }
+
+  function skipAd() {
+    if (canSkip) redirectToTarget();
+  }
+
+  function redirectToTarget() {
+    if (!targetUrl) return;
+    // Try to open in app if mobile and known platform
+    const ua = navigator.userAgent;
+    const url = targetUrl;
+    
+    // YouTube
+    if (url.includes('youtube.com/watch') || url.includes('youtu.be')) {
+      const vid = extractYouTubeId(url);
+      if (vid) {
+        if (/iPhone|iPad|iPod/i.test(ua)) {
+          window.location.href = `youtube://www.youtube.com/watch?v=${vid}`;
+          setTimeout(() => { window.location.href = url; }, 2000);
+          return;
+        } else if (/Android/i.test(ua)) {
+          window.location.href = `intent://www.youtube.com/watch?v=${vid}#Intent;package=com.google.android.youtube;scheme=https;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+          return;
+        }
+      }
+    }
+    // Instagram
+    if (url.includes('instagram.com')) {
+      if (/iPhone|iPad|iPod/i.test(ua)) {
+        window.location.href = url.replace('https://', 'instagram://');
+        setTimeout(() => { window.location.href = url; }, 1500);
+        return;
+      } else if (/Android/i.test(ua)) {
+        window.location.href = `intent://${url.replace('https://', '')}#Intent;package=com.instagram.android;scheme=https;end`;
+        return;
+      }
+    }
+    // Facebook
+    if (url.includes('facebook.com') || url.includes('fb.com')) {
+      if (/iPhone|iPad|iPod/i.test(ua)) {
+        window.location.href = url.replace('https://', 'fb://');
+        setTimeout(() => { window.location.href = url; }, 1500);
+        return;
+      } else if (/Android/i.test(ua)) {
+        window.location.href = `intent://${url.replace('https://', '')}#Intent;package=com.facebook.katana;scheme=https;end`;
+        return;
+      }
+    }
+    // Default: just redirect
+    window.location.href = url;
+  }
+
+  function extractYouTubeId(url) {
+    const reg = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+    const match = url.match(reg);
+    return match ? match[1] : null;
+  }
+
+  // Start
+  if (!shortId) {
+    document.body.innerHTML = '<h2>Missing link ID</h2>';
+  } else {
+    fetchTargetAndAd();
+    updateTimer();
+  }
+</script>
+</body>
+</html>
