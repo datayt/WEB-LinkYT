@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YTSnap Pro — Track & Open</title>
+<title>YTSnap — Instant YouTube Opener</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  /* CSS same as before — skip for brevity, but keep it as is */
+  /* Same professional dark theme */
   :root {
     --red: #ff1f1f;
     --dark: #0a0a0a;
@@ -319,6 +319,17 @@
   }
 
   #main-screen { display: flex; flex-direction: column; }
+  
+  .admin-link {
+    margin-top: 30px;
+    text-align: center;
+    opacity: 0.5;
+    font-size: 10px;
+  }
+  .admin-link a {
+    color: var(--muted);
+    text-decoration: none;
+  }
 </style>
 </head>
 <body>
@@ -326,8 +337,8 @@
 <!-- MAIN SCREEN -->
 <div class="container" id="main-screen">
   <div class="logo">
-    <span class="logo-text">YTSNAP PRO</span>
-    <span class="logo-badge">v2</span>
+    <span class="logo-text">YTSNAP</span>
+    <span class="logo-badge">PRO</span>
   </div>
   <p class="tagline">Instant YouTube Opener + Analytics</p>
 
@@ -337,7 +348,7 @@
       <input type="text" id="url-input" placeholder="https://youtu.be/... or youtube.com/watch?v=...">
       <button onclick="generate()">SNAP</button>
     </div>
-    <div class="error" id="error-msg">// couldn't find a valid YouTube video ID</div>
+    <div class="error" id="error-msg">// invalid YouTube URL</div>
   </div>
 
   <div class="output-card" id="output-card">
@@ -351,23 +362,15 @@
   <div class="how">
     <div class="how-title">How it works</div>
     <div class="steps">
-      <div class="step">
-        <span class="step-num">01</span>
-        <span>Paste any YouTube URL above and hit SNAP to generate your instant link</span>
-      </div>
-      <div class="step">
-        <span class="step-num">02</span>
-        <span>Share that link anywhere — Instagram bio, DMs, stories, wherever</span>
-      </div>
-      <div class="step">
-        <span class="step-num">03</span>
-        <span>When someone taps it, the page fires the YouTube app URI scheme directly — no 5-second OS negotiation, just instant open</span>
-      </div>
-      <div class="step">
-        <span class="step-num">04</span>
-        <span>📊 Each click is logged to your Google Sheet with timestamp, IP, device info</span>
-      </div>
+      <div class="step"><span class="step-num">01</span><span>Paste YouTube URL → SNAP</span></div>
+      <div class="step"><span class="step-num">02</span><span>Share generated link anywhere</span></div>
+      <div class="step"><span class="step-num">03</span><span>Click opens YouTube app instantly</span></div>
+      <div class="step"><span class="step-num">04</span><span>📊 All clicks logged to secure sheet</span></div>
     </div>
+  </div>
+  
+  <div class="admin-link">
+    <a href="admin.html">🔐 Admin Access</a>
   </div>
 </div>
 
@@ -385,30 +388,19 @@
 
 <script>
   // ⚠️ REPLACE WITH YOUR GOOGLE APPS SCRIPT WEB APP URL ⚠️
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4nY90k9FldQXAfi4hU3kt_35uNzRv6qLaQR4HAwhO6_MxO2_ugZZYC6Z0R3R9XAW6KQ/exec';
+  const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
 
-  // ── FETCH IP & LOCATION ───────────────────────────────────────────
   async function fetchIpAndLocation() {
     try {
-      const response = await fetch('https://ipapi.co/json/');
-      const data = await response.json();
-      return {
-        ip: data.ip || 'Unknown',
-        country: data.country_name || 'Unknown',
-        city: data.city || 'Unknown'
-      };
-    } catch (error) {
-      console.warn('IP fetch failed, using fallback');
-      return { ip: 'Unknown', country: 'Unknown', city: 'Unknown' };
-    }
+      const res = await fetch('https://ipapi.co/json/');
+      const d = await res.json();
+      return { ip: d.ip || 'Unknown', country: d.country_name || 'Unknown', city: d.city || 'Unknown' };
+    } catch { return { ip: 'Unknown', country: 'Unknown', city: 'Unknown' }; }
   }
 
-  // ── SEND ANALYTICS TO GOOGLE SHEET (URL ENCODED FORMAT) ──────────
   async function sendAnalytics(videoId, shortLink) {
     try {
       const ipData = await fetchIpAndLocation();
-      
-      // Build payload as URLSearchParams (application/x-www-form-urlencoded)
       const params = new URLSearchParams();
       params.append('videoId', videoId);
       params.append('shortLink', shortLink);
@@ -418,128 +410,72 @@
       params.append('userAgent', navigator.userAgent);
       params.append('platform', navigator.platform || 'Unknown');
       params.append('referrer', document.referrer || 'Direct');
-
-      // Send as simple POST form data (no CORS preflight needed)
-      await fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      });
-      console.log('📊 Analytics sent to sheet');
-    } catch (error) {
-      console.error('Analytics send failed:', error);
-    }
+      await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() });
+      console.log('📊 Analytics sent');
+    } catch(e) { console.error(e); }
   }
 
-  // ── EXTRACT VIDEO ID ──────────────────────────────────────────────
   function extractVideoId(url) {
     if (/music\.youtube\.com/.test(url)) return null;
     const patterns = [
-      /(?:(?:www\.|m\.)?youtube\.com\/watch\?(?:.*&)?v=)([a-zA-Z0-9_-]{11})/,
+      /(?:youtube\.com\/watch\?.*v=)([a-zA-Z0-9_-]{11})/,
       /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
       /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
       /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
       /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
       /(?:youtube\.com\/live\/)([a-zA-Z0-9_-]{11})/,
     ];
-    for (const p of patterns) {
-      const m = url.match(p);
-      if (m) return m[1];
-    }
+    for (let p of patterns) { let m = url.match(p); if (m) return m[1]; }
     return null;
   }
 
-  // ── GENERATE LINK ─────────────────────────────────────────────────
   function generate() {
     const input = document.getElementById('url-input').value.trim();
-    const errorEl = document.getElementById('error-msg');
-    const outputCard = document.getElementById('output-card');
+    const err = document.getElementById('error-msg');
+    const card = document.getElementById('output-card');
     const linkEl = document.getElementById('generated-link');
-
     const vid = extractVideoId(input);
-
-    if (!vid) {
-      errorEl.classList.add('show');
-      outputCard.classList.remove('show');
-      return;
-    }
-
-    errorEl.classList.remove('show');
-
+    if (!vid) { err.classList.add('show'); card.classList.remove('show'); return; }
+    err.classList.remove('show');
     const base = window.location.href.split('?')[0];
-    const redirectUrl = `${base}?v=${vid}`;
-
-    linkEl.textContent = redirectUrl;
-    outputCard.classList.add('show');
-
-    const copyBtn = document.getElementById('copy-btn');
-    copyBtn.textContent = 'COPY';
-    copyBtn.classList.remove('copied');
+    linkEl.textContent = `${base}?v=${vid}`;
+    card.classList.add('show');
+    document.getElementById('copy-btn').textContent = 'COPY';
   }
 
-  // ── COPY TO CLIPBOARD ─────────────────────────────────────────────
   function copyLink() {
     const text = document.getElementById('generated-link').textContent;
     navigator.clipboard.writeText(text).then(() => {
       const btn = document.getElementById('copy-btn');
-      btn.textContent = 'DONE ✓';
-      btn.classList.add('copied');
-      setTimeout(() => {
-        btn.textContent = 'COPY';
-        btn.classList.remove('copied');
-      }, 2000);
+      btn.textContent = 'DONE ✓'; btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('copied'); }, 2000);
     });
   }
 
-  // ── ENTER KEY SUPPORT ─────────────────────────────────────────────
-  document.getElementById('url-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') generate();
-  });
+  document.getElementById('url-input').addEventListener('keydown', e => { if(e.key==='Enter') generate(); });
 
-  // ── REDIRECT MODE (WITH ANALYTICS) ────────────────────────────────
   async function doRedirect(vid) {
     document.getElementById('main-screen').style.display = 'none';
     document.getElementById('redirect-screen').classList.add('active');
-
     const ytUrl = `https://www.youtube.com/watch?v=${vid}`;
-    const fallback = document.getElementById('fallback-msg');
-    fallback.innerHTML = `Not opening? <a href="${ytUrl}" target="_blank">Tap here</a>`;
-
-    const shortLink = window.location.href;
-
-    // Send analytics (fire and forget)
-    sendAnalytics(vid, shortLink);
-
+    document.getElementById('fallback-msg').innerHTML = `Not opening? <a href="${ytUrl}" target="_blank">Tap here</a>`;
+    sendAnalytics(vid, window.location.href);
     const ua = navigator.userAgent;
-
     if (/iPhone|iPad|iPod/i.test(ua)) {
-      const iosScheme = `youtube://www.youtube.com/watch?v=${vid}`;
-      window.location.href = iosScheme;
-      let fallbackTimer = setTimeout(() => { window.location.href = ytUrl; }, 2500);
-      const cancelFallback = () => {
-        clearTimeout(fallbackTimer);
-        document.removeEventListener('visibilitychange', cancelFallback);
-        window.removeEventListener('pagehide', cancelFallback);
-      };
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden) cancelFallback();
-      });
-      window.addEventListener('pagehide', cancelFallback);
+      window.location.href = `youtube://www.youtube.com/watch?v=${vid}`;
+      let t = setTimeout(() => { window.location.href = ytUrl; }, 2500);
+      const cancel = () => { clearTimeout(t); };
+      document.addEventListener('visibilitychange', () => { if(document.hidden) cancel(); });
+      window.addEventListener('pagehide', cancel);
     } else if (/Android/i.test(ua)) {
-      const intentUri = `intent://www.youtube.com/watch?v=${vid}#Intent;package=com.google.android.youtube;scheme=https;S.browser_fallback_url=${encodeURIComponent(ytUrl)};end`;
-      window.location.href = intentUri;
-    } else {
-      window.location.href = ytUrl;
-    }
+      window.location.href = `intent://www.youtube.com/watch?v=${vid}#Intent;package=com.google.android.youtube;scheme=https;S.browser_fallback_url=${encodeURIComponent(ytUrl)};end`;
+    } else { window.location.href = ytUrl; }
   }
 
-  // ── INIT ──────────────────────────────────────────────────────────
   (function init() {
-    const params = new URLSearchParams(window.location.search);
-    const vid = params.get('v');
-    if (vid && /^[a-zA-Z0-9_-]{11}$/.test(vid)) {
-      doRedirect(vid);
-    }
+    const p = new URLSearchParams(window.location.search);
+    const vid = p.get('v');
+    if (vid && /^[a-zA-Z0-9_-]{11}$/.test(vid)) doRedirect(vid);
   })();
 </script>
 </body>
