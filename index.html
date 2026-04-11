@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YTSnap — Instant YouTube Opener</title>
+<title>SnapLink — Short URLs + Ads</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  /* Same professional dark theme */
+  /* Same dark theme as before */
   :root {
     --red: #ff1f1f;
     --dark: #0a0a0a;
@@ -266,60 +266,6 @@
     flex-shrink: 0;
   }
 
-  #redirect-screen {
-    display: none;
-    text-align: center;
-  }
-
-  #redirect-screen.active {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 20px;
-  }
-
-  .redirect-icon {
-    width: 72px;
-    height: 72px;
-    background: var(--red);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: pulse 1.2s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.05); opacity: 0.85; }
-  }
-
-  .redirect-title {
-    font-family: var(--display);
-    font-size: 42px;
-    letter-spacing: 2px;
-    line-height: 1;
-  }
-
-  .redirect-sub {
-    font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-  }
-
-  .redirect-fallback {
-    margin-top: 16px;
-    font-size: 11px;
-    color: var(--muted);
-  }
-
-  .redirect-fallback a {
-    color: var(--red);
-    text-decoration: none;
-  }
-
-  #main-screen { display: flex; flex-direction: column; }
-  
   .admin-link {
     margin-top: 30px;
     text-align: center;
@@ -333,26 +279,24 @@
 </style>
 </head>
 <body>
-
-<!-- MAIN SCREEN -->
 <div class="container" id="main-screen">
   <div class="logo">
-    <span class="logo-text">YTSNAP</span>
+    <span class="logo-text">SNAPLINK</span>
     <span class="logo-badge">PRO</span>
   </div>
-  <p class="tagline">Instant YouTube Opener + Analytics</p>
+  <p class="tagline">Short Links + Smart Redirects</p>
 
   <div class="card">
-    <span class="label">Paste YouTube Link</span>
+    <span class="label">Paste Any Link</span>
     <div class="input-row">
-      <input type="text" id="url-input" placeholder="https://youtu.be/... or youtube.com/watch?v=...">
+      <input type="text" id="url-input" placeholder="https://... (YouTube, Instagram, any site)">
       <button onclick="generate()">SNAP</button>
     </div>
-    <div class="error" id="error-msg">// invalid YouTube URL</div>
+    <div class="error" id="error-msg">// invalid URL</div>
   </div>
 
   <div class="output-card" id="output-card">
-    <div class="output-label">Your Trackable Short Link</div>
+    <div class="output-label">Your Short Link</div>
     <div class="link-row">
       <div class="link-box" id="generated-link"></div>
       <button class="copy-btn" id="copy-btn" onclick="copyLink()">COPY</button>
@@ -362,85 +306,54 @@
   <div class="how">
     <div class="how-title">How it works</div>
     <div class="steps">
-      <div class="step"><span class="step-num">01</span><span>Paste YouTube URL → SNAP</span></div>
-      <div class="step"><span class="step-num">02</span><span>Share generated link anywhere</span></div>
-      <div class="step"><span class="step-num">03</span><span>Click opens YouTube app instantly</span></div>
-      <div class="step"><span class="step-num">04</span><span>📊 All clicks logged to secure sheet</span></div>
+      <div class="step"><span class="step-num">01</span><span>Paste any URL → Get short link</span></div>
+      <div class="step"><span class="step-num">02</span><span>Share it anywhere</span></div>
+      <div class="step"><span class="step-num">03</span><span>Click shows a 10s ad page, then opens destination</span></div>
+      <div class="step"><span class="step-num">04</span><span>📊 Admin tracks everything</span></div>
     </div>
   </div>
   
   <div class="admin-link">
-    <a href="admin.html">🔐 Admin Access</a>
+    <a href="admin.html">🔐 Admin Panel</a>
   </div>
-</div>
-
-<!-- REDIRECT SCREEN -->
-<div class="container" id="redirect-screen">
-  <div class="redirect-icon">
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
-      <path d="M8 5v14l11-7z"/>
-    </svg>
-  </div>
-  <div class="redirect-title">OPENING YOUTUBE</div>
-  <div class="redirect-sub">Launching app instantly...</div>
-  <div class="redirect-fallback" id="fallback-msg"></div>
 </div>
 
 <script>
   // ⚠️ REPLACE WITH YOUR GOOGLE APPS SCRIPT WEB APP URL ⚠️
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwXscQdrON2nEL4VJ2GEW59kNjQ4ZNImUvwbwH1qJSLC78WgMPoaKQ6KS_aY7WGN_bY/exec';
+  const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
 
-  async function fetchIpAndLocation() {
-    try {
-      const res = await fetch('https://ipapi.co/json/');
-      const d = await res.json();
-      return { ip: d.ip || 'Unknown', country: d.country_name || 'Unknown', city: d.city || 'Unknown' };
-    } catch { return { ip: 'Unknown', country: 'Unknown', city: 'Unknown' }; }
+  function isValidUrl(url) {
+    try { new URL(url); return true; } catch { return false; }
   }
 
-  async function sendAnalytics(videoId, shortLink) {
-    try {
-      const ipData = await fetchIpAndLocation();
-      const params = new URLSearchParams();
-      params.append('videoId', videoId);
-      params.append('shortLink', shortLink);
-      params.append('ip', ipData.ip);
-      params.append('country', ipData.country);
-      params.append('city', ipData.city);
-      params.append('userAgent', navigator.userAgent);
-      params.append('platform', navigator.platform || 'Unknown');
-      params.append('referrer', document.referrer || 'Direct');
-      await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() });
-      console.log('📊 Analytics sent');
-    } catch(e) { console.error(e); }
-  }
-
-  function extractVideoId(url) {
-    if (/music\.youtube\.com/.test(url)) return null;
-    const patterns = [
-      /(?:youtube\.com\/watch\?.*v=)([a-zA-Z0-9_-]{11})/,
-      /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
-      /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-      /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-      /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
-      /(?:youtube\.com\/live\/)([a-zA-Z0-9_-]{11})/,
-    ];
-    for (let p of patterns) { let m = url.match(p); if (m) return m[1]; }
-    return null;
-  }
-
-  function generate() {
+  async function generate() {
     const input = document.getElementById('url-input').value.trim();
     const err = document.getElementById('error-msg');
     const card = document.getElementById('output-card');
     const linkEl = document.getElementById('generated-link');
-    const vid = extractVideoId(input);
-    if (!vid) { err.classList.add('show'); card.classList.remove('show'); return; }
+    
+    if (!isValidUrl(input)) {
+      err.classList.add('show');
+      card.classList.remove('show');
+      return;
+    }
     err.classList.remove('show');
-    const base = window.location.href.split('?')[0];
-    linkEl.textContent = `${base}?v=${vid}`;
-    card.classList.add('show');
-    document.getElementById('copy-btn').textContent = 'COPY';
+    
+    try {
+      const formData = new URLSearchParams();
+      formData.append('action', 'create');
+      formData.append('url', input);
+      const res = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.id) {
+        const shortLink = `${window.location.origin}${window.location.pathname}?id=${data.id}`;
+        linkEl.textContent = shortLink;
+        card.classList.add('show');
+        document.getElementById('copy-btn').textContent = 'COPY';
+      } else {
+        alert('Error generating link');
+      }
+    } catch(e) { alert('Connection error'); }
   }
 
   function copyLink() {
@@ -454,28 +367,14 @@
 
   document.getElementById('url-input').addEventListener('keydown', e => { if(e.key==='Enter') generate(); });
 
-  async function doRedirect(vid) {
-    document.getElementById('main-screen').style.display = 'none';
-    document.getElementById('redirect-screen').classList.add('active');
-    const ytUrl = `https://www.youtube.com/watch?v=${vid}`;
-    document.getElementById('fallback-msg').innerHTML = `Not opening? <a href="${ytUrl}" target="_blank">Tap here</a>`;
-    sendAnalytics(vid, window.location.href);
-    const ua = navigator.userAgent;
-    if (/iPhone|iPad|iPod/i.test(ua)) {
-      window.location.href = `youtube://www.youtube.com/watch?v=${vid}`;
-      let t = setTimeout(() => { window.location.href = ytUrl; }, 2500);
-      const cancel = () => { clearTimeout(t); };
-      document.addEventListener('visibilitychange', () => { if(document.hidden) cancel(); });
-      window.addEventListener('pagehide', cancel);
-    } else if (/Android/i.test(ua)) {
-      window.location.href = `intent://www.youtube.com/watch?v=${vid}#Intent;package=com.google.android.youtube;scheme=https;S.browser_fallback_url=${encodeURIComponent(ytUrl)};end`;
-    } else { window.location.href = ytUrl; }
-  }
-
-  (function init() {
-    const p = new URLSearchParams(window.location.search);
-    const vid = p.get('v');
-    if (vid && /^[a-zA-Z0-9_-]{11}$/.test(vid)) doRedirect(vid);
+  // If there's ?id= in URL, we're in redirect mode — but we'll handle in separate interstitial page
+  // For simplicity, we redirect to interstitial page with id param
+  (function() {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    if (id) {
+      window.location.href = `interstitial.html?id=${id}`;
+    }
   })();
 </script>
 </body>
