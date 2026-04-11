@@ -39,7 +39,11 @@
   .btn-outline { background: transparent; border: 1px solid #333; color: #ccc; }
   .ad-form { background: #151515; border: 1px solid #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
   .ad-form select, .ad-form input, .ad-form textarea { width: 100%; background: #0d0d0d; border: 1px solid #2a2a2a; color: #fff; padding: 10px; margin-bottom: 12px; border-radius: 4px; }
-  .ad-item { background: #1a1a1a; padding: 15px; margin-bottom: 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .ad-form-row { display: flex; gap: 10px; }
+  .ad-form-row > * { flex: 1; }
+  .ad-item { background: #1a1a1a; padding: 15px; margin-bottom: 10px; border-radius: 6px; }
+  .ad-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .ad-item-details { display: flex; gap: 20px; font-size: 12px; color: #888; }
   .ad-item button { background: #333; border: none; color: #fff; padding: 6px 12px; border-radius: 4px; margin-left: 10px; cursor: pointer; }
 </style>
 </head>
@@ -88,8 +92,21 @@
     <div id="ads-tab" class="tab-content">
       <div class="ad-form">
         <h3 style="margin-bottom:15px;">Add New Ad</h3>
-        <select id="ad-type"><option value="image">Image URL</option><option value="video">Video URL</option><option value="text">Text</option></select>
-        <input type="text" id="ad-content" placeholder="URL or text">
+        <select id="ad-type">
+          <option value="image">Image URL</option>
+          <option value="video">Video URL (MP4)</option>
+          <option value="youtube">YouTube Video URL</option>
+          <option value="website">Website URL (Embed)</option>
+          <option value="text">Text Message</option>
+        </select>
+        <input type="text" id="ad-content" placeholder="URL or text content">
+        <div class="ad-form-row">
+          <input type="number" id="ad-duration" placeholder="Duration (seconds)" value="10" min="3" max="60">
+          <label style="display:flex; align-items:center; gap:8px; background:#0d0d0d; padding:0 12px; border-radius:4px; border:1px solid #2a2a2a;">
+            <input type="checkbox" id="ad-skippable" checked> Skippable
+          </label>
+          <input type="number" id="ad-skipafter" placeholder="Skip after (seconds)" value="5" min="1">
+        </div>
         <button class="btn" onclick="addAd()">Add Ad</button>
       </div>
       <div id="ads-list"></div>
@@ -149,8 +166,13 @@
   function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    if (tab === 'analytics') { document.querySelectorAll('.tab')[0].classList.add('active'); document.getElementById('analytics-tab').classList.add('active'); }
-    else { document.querySelectorAll('.tab')[1].classList.add('active'); document.getElementById('ads-tab').classList.add('active'); }
+    if (tab === 'analytics') {
+      document.querySelectorAll('.tab')[0].classList.add('active');
+      document.getElementById('analytics-tab').classList.add('active');
+    } else {
+      document.querySelectorAll('.tab')[1].classList.add('active');
+      document.getElementById('ads-tab').classList.add('active');
+    }
   }
 
   async function loadClicks() {
@@ -196,8 +218,18 @@
       const list = document.getElementById('ads-list');
       list.innerHTML = data.ads.map(ad => `
         <div class="ad-item">
-          <span>${ad.type}: ${ad.content.substring(0,50)}...</span>
-          <div><button onclick="deleteAd('${ad.id}')">Delete</button></div>
+          <div class="ad-item-header">
+            <span><strong>${ad.type.toUpperCase()}</strong> ${ad.content.substring(0,40)}...</span>
+            <div>
+              <button onclick="toggleActive('${ad.id}', ${!ad.active})">${ad.active ? 'Disable' : 'Enable'}</button>
+              <button onclick="deleteAd('${ad.id}')">Delete</button>
+            </div>
+          </div>
+          <div class="ad-item-details">
+            <span>⏱️ Duration: ${ad.duration}s</span>
+            <span>⏭️ Skippable: ${ad.skippable ? 'Yes' : 'No'}</span>
+            ${ad.skippable ? `<span>⏩ Skip after: ${ad.skipAfter}s</span>` : ''}
+          </div>
         </div>
       `).join('');
     } catch(e) {}
@@ -206,8 +238,20 @@
   async function addAd() {
     const type = document.getElementById('ad-type').value;
     const content = document.getElementById('ad-content').value.trim();
+    const duration = parseInt(document.getElementById('ad-duration').value) || 10;
+    const skippable = document.getElementById('ad-skippable').checked;
+    const skipAfter = parseInt(document.getElementById('ad-skipafter').value) || 5;
+    
     if (!content) return alert('Enter content');
-    const fd = new URLSearchParams(); fd.append('action','addAd'); fd.append('token',authToken); fd.append('type',type); fd.append('content',content);
+    const fd = new URLSearchParams();
+    fd.append('action','addAd');
+    fd.append('token',authToken);
+    fd.append('type',type);
+    fd.append('content',content);
+    fd.append('duration',duration);
+    fd.append('skippable',skippable);
+    fd.append('skipAfter',skipAfter);
+    
     await fetch(SCRIPT_URL, { method:'POST', body:fd });
     document.getElementById('ad-content').value = '';
     loadAds();
@@ -215,6 +259,12 @@
 
   async function deleteAd(id) {
     const fd = new URLSearchParams(); fd.append('action','deleteAd'); fd.append('token',authToken); fd.append('id',id);
+    await fetch(SCRIPT_URL, { method:'POST', body:fd });
+    loadAds();
+  }
+
+  async function toggleActive(id, active) {
+    const fd = new URLSearchParams(); fd.append('action','toggleAd'); fd.append('token',authToken); fd.append('id',id); fd.append('active',active);
     await fetch(SCRIPT_URL, { method:'POST', body:fd });
     loadAds();
   }
