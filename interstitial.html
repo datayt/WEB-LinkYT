@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Loading...</title>
 <style>
   body {
@@ -16,7 +16,7 @@
     color: #fff;
   }
   .container {
-    max-width: 600px;
+    max-width: 800px;
     width: 90%;
     text-align: center;
   }
@@ -32,24 +32,32 @@
     border-radius: 12px;
     padding: 24px;
     margin: 20px 0;
-    min-height: 250px;
+    min-height: 300px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
   .ad-image {
     max-width: 100%;
-    max-height: 300px;
+    max-height: 400px;
     border-radius: 8px;
   }
-  .ad-video {
-    max-width: 100%;
-    max-height: 300px;
+  .ad-video, .ad-youtube {
+    width: 100%;
+    max-height: 400px;
     border-radius: 8px;
+  }
+  .ad-website {
+    width: 100%;
+    height: 400px;
+    border: none;
+    border-radius: 8px;
+    background: white;
   }
   .ad-text {
-    font-size: 20px;
+    font-size: 24px;
     color: #ccc;
+    padding: 20px;
   }
   .skip-btn {
     background: #333;
@@ -62,9 +70,13 @@
     margin-top: 10px;
     transition: all 0.2s;
   }
-  .skip-btn:hover {
+  .skip-btn:hover:not(:disabled) {
     border-color: #ff1f1f;
     color: #ff1f1f;
+  }
+  .skip-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   .footer {
     margin-top: 20px;
@@ -78,11 +90,9 @@
 <div class="container">
   <div class="timer" id="timer">10</div>
   <div class="ad-container" id="ad-container">
-    <div class="ad-text" id="ad-text">Loading ad...</div>
-    <img id="ad-image" style="display:none;" class="ad-image">
-    <video id="ad-video" style="display:none;" class="ad-video" controls autoplay muted playsinline></video>
+    <!-- Dynamic content will be inserted here -->
   </div>
-  <button class="skip-btn" id="skip-btn" onclick="skipAd()" disabled>Please wait 5s</button>
+  <button class="skip-btn" id="skip-btn" onclick="skipAd()" disabled>Skip Ad</button>
   <div class="footer">SnapLink — Smart Redirect</div>
 </div>
 
@@ -90,10 +100,12 @@
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwH8C5XOSbWwiPHHjSJo4l_v2mYhOVokRlXiVEcYgHAx4BKTAPHkUTrzMhwvJAh_U1B/exec';
   const urlParams = new URLSearchParams(window.location.search);
   const shortId = urlParams.get('id');
+  
   let countdown = 10;
-  let canSkip = false;
   let targetUrl = '';
   let adData = null;
+  let skippable = false;
+  let skipAfter = 5; // default seconds before skip button enables
 
   async function fetchTargetAndAd() {
     try {
@@ -108,36 +120,84 @@
       }
       targetUrl = data.url;
       adData = data.ad;
+      
+      // Set timer based on ad duration (default 10)
+      countdown = adData?.duration || 10;
+      skippable = adData?.skippable || false;
+      skipAfter = adData?.skipAfter || 5;
+      
+      document.getElementById('timer').textContent = countdown;
       displayAd(adData);
+      
       // Send click analytics
       await sendAnalytics(shortId);
+      
+      // Start countdown
+      updateTimer();
     } catch(e) {
       document.body.innerHTML = '<h2>Error loading</h2>';
     }
   }
 
   function displayAd(ad) {
-    const textEl = document.getElementById('ad-text');
-    const imgEl = document.getElementById('ad-image');
-    const vidEl = document.getElementById('ad-video');
-    textEl.style.display = 'none';
-    imgEl.style.display = 'none';
-    vidEl.style.display = 'none';
+    const container = document.getElementById('ad-container');
+    container.innerHTML = '';
     
     if (!ad) {
-      textEl.textContent = 'Advertisement';
-      textEl.style.display = 'block';
-    } else if (ad.type === 'image') {
-      imgEl.src = ad.content;
-      imgEl.style.display = 'block';
-    } else if (ad.type === 'video') {
-      vidEl.src = ad.content;
-      vidEl.style.display = 'block';
-      vidEl.play().catch(()=>{});
-    } else {
-      textEl.textContent = ad.content;
-      textEl.style.display = 'block';
+      container.innerHTML = '<div class="ad-text">Advertisement</div>';
+      return;
     }
+    
+    const type = ad.type;
+    const content = ad.content;
+    
+    if (type === 'image') {
+      const img = document.createElement('img');
+      img.src = content;
+      img.className = 'ad-image';
+      container.appendChild(img);
+    } else if (type === 'video') {
+      const video = document.createElement('video');
+      video.src = content;
+      video.className = 'ad-video';
+      video.controls = true;
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      container.appendChild(video);
+      video.play().catch(()=>{});
+    } else if (type === 'youtube') {
+      // Extract YouTube video ID from URL
+      const videoId = extractYouTubeId(content);
+      if (videoId) {
+        const iframe = document.createElement('iframe');
+        iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1`;
+        iframe.className = 'ad-youtube';
+        iframe.allow = 'autoplay; encrypted-media';
+        iframe.allowFullscreen = true;
+        container.appendChild(iframe);
+      } else {
+        container.innerHTML = '<div class="ad-text">Invalid YouTube URL</div>';
+      }
+    } else if (type === 'website') {
+      const iframe = document.createElement('iframe');
+      iframe.src = content;
+      iframe.className = 'ad-website';
+      iframe.sandbox = 'allow-scripts allow-same-origin allow-popups';
+      container.appendChild(iframe);
+    } else {
+      // text
+      const div = document.createElement('div');
+      div.className = 'ad-text';
+      div.textContent = content;
+      container.appendChild(div);
+    }
+  }
+
+  function extractYouTubeId(url) {
+    const reg = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+    const match = url.match(reg);
+    return match ? match[1] : null;
   }
 
   async function sendAnalytics(id) {
@@ -158,12 +218,24 @@
   }
 
   function updateTimer() {
-    document.getElementById('timer').textContent = countdown;
-    if (countdown <= 5) {
-      document.getElementById('skip-btn').disabled = false;
-      document.getElementById('skip-btn').textContent = 'Skip Ad';
-      canSkip = true;
+    const timerEl = document.getElementById('timer');
+    const skipBtn = document.getElementById('skip-btn');
+    
+    timerEl.textContent = countdown;
+    
+    // Enable skip button if skippable and countdown <= (total - skipAfter) or countdown <= skipAfter?
+    // Logic: total duration - skipAfter = time when skip becomes available
+    const totalDuration = adData?.duration || 10;
+    const secondsElapsed = totalDuration - countdown;
+    
+    if (skippable && secondsElapsed >= skipAfter) {
+      skipBtn.disabled = false;
+      skipBtn.textContent = 'Skip Ad';
+    } else {
+      skipBtn.disabled = true;
+      skipBtn.textContent = `Skip in ${skipAfter - secondsElapsed}s`;
     }
+    
     if (countdown <= 0) {
       redirectToTarget();
     } else {
@@ -173,12 +245,14 @@
   }
 
   function skipAd() {
-    if (canSkip) redirectToTarget();
+    if (skippable && !document.getElementById('skip-btn').disabled) {
+      redirectToTarget();
+    }
   }
 
   function redirectToTarget() {
     if (!targetUrl) return;
-    // Try to open in app if mobile and known platform
+    
     const ua = navigator.userAgent;
     const url = targetUrl;
     
@@ -218,22 +292,14 @@
         return;
       }
     }
-    // Default: just redirect
+    // Default
     window.location.href = url;
   }
 
-  function extractYouTubeId(url) {
-    const reg = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
-    const match = url.match(reg);
-    return match ? match[1] : null;
-  }
-
-  // Start
   if (!shortId) {
     document.body.innerHTML = '<h2>Missing link ID</h2>';
   } else {
     fetchTargetAndAd();
-    updateTimer();
   }
 </script>
 </body>
